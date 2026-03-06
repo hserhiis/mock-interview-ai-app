@@ -176,9 +176,24 @@ export default function Home() {
                     AI
                   </div>
 
-                  <div className="absolute bottom-8 left-0 right-0 px-6 text-center">
-                    <p className="bg-black/70 inline-block px-4 py-2 rounded-xl text-lg font-medium border border-gray-700/50 backdrop-blur-md max-w-[90%]">
-                      {isWaitingForAi ? "Andrew is thinking..." : (messages.findLast(m => m.role === 'assistant')?.content || "Connecting...")}
+                  <div className={`
+                      bg-black/80 backdrop-blur-xl border border-white/10 
+                      rounded-2xl p-3 md:p-4 
+                      shadow-2xl transition-all duration-300
+                      max-w-[95%] w-fit
+                      ${isAiSpeaking ? 'scale-100 opacity-100' : 'scale-95 opacity-90'}
+                      pointer-events-auto
+                    `}>
+                    <p className="text-sm md:text-base lg:text-lg font-medium text-white text-center leading-relaxed break-words overflow-y-auto max-h-[120px] md:max-h-[160px] custom-scrollbar">
+                      {isWaitingForAi ? (
+                          <span className="flex items-center gap-2 italic text-gray-400">
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                          </span>
+                      ) : (
+                          messages.findLast(m => m.role === 'assistant')?.content || "Connecting..."
+                      )}
                     </p>
                   </div>
                 </div>
