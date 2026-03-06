@@ -69,7 +69,7 @@ export default function Home() {
               handleUserResponse(finalSentence);
               accumulatedTextRef.current = ""; // Очищаем буфер после отправки
             }
-          }, 5000);
+          }, 3000);
         }
       };
 
