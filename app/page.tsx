@@ -38,7 +38,11 @@ export default function Home() {
       recognition.lang = 'en-US';
 
       recognition.onresult = (event: any) => {
-        if (!isRecording || isAiSpeaking || isWaitingForAi) return;
+        if (!isRecording || isAiSpeaking || isWaitingForAi) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          accumulatedTextRef.current = "";
+          return;
+        }
 
         let interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -97,6 +101,9 @@ export default function Home() {
   const handleUserResponse = async (userText: string) => {
     if (!userText.trim() || isAiSpeaking || isWaitingForAi) return;
 
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    accumulatedTextRef.current = "";
+
     setIsWaitingForAi(true);
     const newMessages = [...messages, { role: 'user', content: userText }];
     setMessages(newMessages);
@@ -133,6 +140,8 @@ export default function Home() {
 
   const playAiAudio = (audioBase64: string) => {
     // Двойная проверка на пустоту
+    setIsAiSpeaking(true);
+
     if (!audioBase64 || audioBase64 === "data:audio/mp3;base64,null") {
       console.error("Invalid audio data string");
       return;
@@ -147,7 +156,11 @@ export default function Home() {
     audioRef.current = audio;
 
     audio.onplay = () => setIsAiSpeaking(true);
-    audio.onended = () => setIsAiSpeaking(false);
+    audio.onended = () => {
+      setIsAiSpeaking(false);
+      // Очищаем буфер микрофона, чтобы он не "дослышал" остатки хвоста речи ИИ
+      accumulatedTextRef.current = "";
+    };
 
     audio.onerror = (e: any) => {
       const target = e.target as HTMLAudioElement;
