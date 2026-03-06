@@ -14,6 +14,7 @@ export default function Home() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [isWaitingForAi, setIsWaitingForAi] = useState(false);
 
+
   const lang = 'en-US';
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,18 +32,22 @@ export default function Home() {
       const recognition = new SpeechRecognition();
 
       recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.lang = lang;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
       recognition.onresult = (event: any) => {
-        // Если Mute включен — игнорируем входящий звук
         if (!isRecording) return;
 
-        const lastIndex = event.results.length - 1;
-        const transcript = event.results[lastIndex][0].transcript;
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
 
-        if (event.results[lastIndex].isFinal) {
-          handleUserResponse(transcript);
+        if (finalTranscript) {
+          console.log("Recognized:", finalTranscript); // Проверь в консоли, как он слышит Prisma
+          handleUserResponse(finalTranscript);
         }
       };
 
@@ -84,30 +89,62 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages, vacancy }),
       });
+
       const data = await response.json();
 
+      if (data.error) {
+        console.error("Server side error:", data.error);
+        return;
+      }
+
       setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
-      if (data.audio) playAiAudio(data.audio);
+
+      // ПРОВЕРКА: Если аудио пришло - играем, если нет - пишем в консоль
+      if (data.audio) {
+        playAiAudio(data.audio);
+      } else {
+        console.warn("AI generated text, but NO AUDIO was returned from API.");
+      }
+
     } catch (error) {
-      console.error("API Error:", error);
+      console.error("Network or API Error:", error);
     } finally {
       setIsWaitingForAi(false);
     }
   };
 
   const playAiAudio = (audioBase64: string) => {
+    // Двойная проверка на пустоту
+    if (!audioBase64 || audioBase64 === "data:audio/mp3;base64,null") {
+      console.error("Invalid audio data string");
+      return;
+    }
+
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
     }
+
     const audio = new Audio(audioBase64);
     audioRef.current = audio;
+
     audio.onplay = () => setIsAiSpeaking(true);
     audio.onended = () => setIsAiSpeaking(false);
-    audio.play().catch(e => console.error("Autoplay error:", e));
+
+    audio.onerror = (e: any) => {
+      const target = e.target as HTMLAudioElement;
+      console.error("Audio playback error details:", target.error?.code, target.error?.message);
+      setIsAiSpeaking(false);
+    };
+
+    audio.play().catch(err => {
+      console.error("Playback start failed:", err);
+      setIsAiSpeaking(false);
+    });
   };
 
   const startInterview = async () => {
+    new Audio().play().catch(() => {});
     setStep('interview');
     setIsRecording(true);
     try {

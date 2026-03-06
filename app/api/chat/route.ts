@@ -3,47 +3,49 @@ import { Groq } from "groq-sdk";
 import { EdgeTTS } from 'node-edge-tts';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os'; // Нужно для временной папки
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: Request) {
+    let filePath = ''; // Чтобы достать его в блоке finally
+
     try {
         const { messages, vacancy } = await req.json();
 
-        // Strict English Configuration
+        // ТВОЙ ОРИГИНАЛЬНЫЙ КОНФИГ
         const config = {
             voice: 'en-US-AndrewMultilingualNeural',
             pitch: '+0Hz',
-            rate: '+10%',
+            rate: '+5%',
         };
 
+        const isFirstMessage = messages.length === 0;
+
         const systemPrompt = `
-        ROLE: You are Andrew, a Senior Fullstack Developer and world-class Technical Interviewer.
-        CONTEXT: You are conducting a Zoom interview for the position: ${vacancy}.
-        
-        STRICT LANGUAGE RULE: Speak ONLY English. NEVER use any other language.
-        
-        INTERVIEW STRUCTURE:
-        1. Ice-breaker: Ask about their background and most exciting projects.
-        2. Deep Dive: Ask technical questions about React, Next.js, System Design, and Problem Solving.
-        
-        PERSONALITY:
-        - Be energetic, professional, but informal (tech-bro vibe).
-        - Use modern tech slang: "under the hood", "shaky ground", "boilerplate", "look & feel", "ship to production".
-        - Address the candidate as a peer.
-        
-        RULES:
-        - Ask ONLY ONE question at a time.
-        - If the candidate's answer is too short, poke them for more details.
-        - Use commas for natural pauses and CAPS for occasional emphasis in speech.
-        
-        EXAMPLE: "Listen, that's a solid point about React's reconciliation, but how do you actually handle state in a massive production app? Give me a real-world case."
-        `;
+ROLE: Andrew, Senior Dev at "Vortex Stream".
+CONTEXT: conducting a Zoom interview for: ${vacancy}.
+
+STRICT RULE: ONLY speak English. 
+STRICT RULE: If messages.length > 0, DO NOT introduce yourself or the company again. Skip straight to the conversation or technical questions.
+
+CURRENT PHASE:
+${isFirstMessage
+            ? "PHASE 1: Intro yourself and Vortex Stream (real-time data platform), then ask how they started coding."
+            : "PHASE 2: Deep dive. React, Next.js, Prisma, SQL, System Design. React to their previous answer, then ask ONE sharp technical question."}
+
+PERSONALITY:
+- Tech-bro, energetic, uses: "under the hood", "shaky ground", "technical debt".
+- If they mention "Prisma" or "Schema", show that you understand—those are key for Vortex Stream.
+
+RULES:
+- Ask ONLY ONE question.
+- No repeating introductions.
+`;
 
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: systemPrompt },
-                // Limit context to last 10 messages for better performance and focus
                 ...messages.slice(-10)
             ],
             model: "llama-3.3-70b-versatile",
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
 
         const aiText = chatCompletion.choices[0]?.message?.content || "Connection issues... Could you repeat that, please?";
 
-        // Edge TTS for English
+        // ТВОЙ ОРИГИНАЛЬНЫЙ TTS
         const tts = new EdgeTTS({
             voice: config.voice,
             lang: 'en-US',
@@ -62,15 +64,16 @@ export async function POST(req: Request) {
             timeout: 30000
         });
 
+        // ПРАВКА ДЛЯ VERCEL: пишем в /tmp
         const fileName = `speech-${Date.now()}.mp3`;
-        const filePath = path.join(process.cwd(), fileName);
+        filePath = path.join(os.tmpdir(), fileName);
 
         try {
             await tts.ttsPromise(aiText, filePath);
             const audioBuffer = await fs.readFile(filePath);
             const audioBase64 = audioBuffer.toString('base64');
-            await fs.unlink(filePath);
 
+            // Возвращаем результат
             return NextResponse.json({
                 text: aiText,
                 audio: `data:audio/mp3;base64,${audioBase64}`
@@ -78,6 +81,13 @@ export async function POST(req: Request) {
         } catch (ttsErr) {
             console.error("TTS Error:", ttsErr);
             return NextResponse.json({ text: aiText, audio: null });
+        } finally {
+            // ЧИСТИМ ЗА СОБОЙ (чтобы файлы не копились в /tmp)
+            if (filePath) {
+                try {
+                    await fs.unlink(filePath);
+                } catch (e) {}
+            }
         }
 
     } catch (error: any) {
