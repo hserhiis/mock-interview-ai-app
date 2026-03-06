@@ -21,6 +21,8 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const accumulatedTextRef = useRef<string>("");
 
   const getWindow = () => typeof window !== 'undefined' ? (window as unknown as IWindow) : null;
 
@@ -36,18 +38,34 @@ export default function Home() {
       recognition.lang = 'en-US';
 
       recognition.onresult = (event: any) => {
-        if (!isRecording) return;
+        if (!isRecording || isAiSpeaking || isWaitingForAi) return;
 
-        let finalTranscript = '';
+        let interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            interimTranscript += event.results[i][0].transcript;
           }
         }
 
-        if (finalTranscript) {
-          console.log("Recognized:", finalTranscript); // Проверь в консоли, как он слышит Prisma
-          handleUserResponse(finalTranscript);
+        if (interimTranscript) {
+          // Добавляем новый кусок к тому, что уже услышали
+          accumulatedTextRef.current += " " + interimTranscript;
+          console.log("Listening... Current progress:", accumulatedTextRef.current);
+
+          // Сбрасываем предыдущий таймер, если ты снова начал говорить
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+          }
+
+          // Ставим ожидание на 5000мс (5 секунд)
+          silenceTimerRef.current = setTimeout(() => {
+            const finalSentence = accumulatedTextRef.current.trim();
+            if (finalSentence && !isAiSpeaking && !isWaitingForAi) {
+              console.log("5 seconds of silence. Sending to Andrew:", finalSentence);
+              handleUserResponse(finalSentence);
+              accumulatedTextRef.current = ""; // Очищаем буфер после отправки
+            }
+          }, 5000);
         }
       };
 
